@@ -19,18 +19,25 @@ double 	Vpvref,
 		time_previous,
 		now,
 		delta_T, 
-		Vpvref_previous = 0,
+		Vpvref_previous = 0,time_previous_Vpvref = 0,
 		Ipvo = 0,
 		Vpvo = 0;
 
 //SLEW RATE
 double 	Vpvref_SLEWRATE;
-		//Vpvref_SLEWRATE_MAX = 100, 
-		//Vpvref_SLEWRATE_MIN = 1;
+double 	Vpvref_SLEWRATE_FINAL = 0 , Vpvref_SLEWRATE_FINAL_AUXILIAR = 0;
+const int Vpvref_SLEWRATE_MAX = 550;// MODIFICAR DE ACORDO COM OS TESTES 
+const int Vpvref_SLEWRATE_MIN = 510;// MODIFICAR DE ACORDO COM OS TESTES 
+
+
+
+double derivada1_SR_aux = 0;
+double d1_SR_out = 0;
 
 void setup(){
 	Serial.begin(9600);
 	time_previous = millis();
+	time_previous_Vpvref = millis();
 }
 
 void loop() {
@@ -48,7 +55,53 @@ void loop() {
 	delta_T = now - time_previous;
 	Vpvref_SLEWRATE = (Vpvref - Vpvref_previous)/delta_T;
 
-	
+	const double SR_ST = 0.0002; //TESTAR PARA REFICAR VALOR
+
+	if(Vpvref_SLEWRATE>Vpvref_SLEWRATE_MAX){		
+		Vpvref_SLEWRATE_FINAL=(Vpvref_SLEWRATE_MAX*SR_ST)-(Vpvref_SLEWRATE_FINAL_AUXILIAR);		
+	}
+
+	if(Vpvref_SLEWRATE<Vpvref_SLEWRATE_MIN){		
+		Vpvref_SLEWRATE_FINAL=(Vpvref_SLEWRATE_MIN*SR_ST)-(Vpvref_SLEWRATE_FINAL_AUXILIAR);		
+	}
+
+	Vpvref_SLEWRATE_FINAL_AUXILIAR=Vpvref_SLEWRATE_FINAL;
+
+	const double Vcapv = 633.1;
+	if(Vpvref_SLEWRATE_FINAL>Vcapv)Vpvref=Vcapv;  
+	if(Vpvref_SLEWRATE_FINAL<0) Vpvref=0; 
+
+	////////////////////////////////////////////////////ILV (Equação 28)///////////////////////////////////////////////
+
+	//////1.1) Slew Rate e Saturação de d1_ Vpvref
+	double d1_SR_R=200;
+	double d1_SR_F=100;
+
+	//////1) Cálculo da 1º derivada de Vpvref
+	double delta_time_ST  = millis()-time_previous_Vpvref;
+	double derivada1_Vpvref = (Vpvref-Vpvref_previous)/(delta_time_ST);	
+
+	double derivada1_SR=(derivada1_Vpvref-derivada1_SR_aux)/(delta_time_ST);
+
+
+	if(derivada1_SR>d1_SR_R){	
+		d1_SR_out=((d1_SR_R)*(delta_time_ST))+(derivada1_SR_aux);	
+	}
+
+	if(derivada1_SR<d1_SR_F){	
+		d1_SR_out=(d1_SR_F*delta_time_ST)-(derivada1_SR_aux);
+	}
+
+	derivada1_SR_aux=d1_SR_out;
+
+	if(derivada1_Vpvref>550)derivada1_Vpvref=550;  
+	if(derivada1_Vpvref<520) derivada1_Vpvref=520; 
+
+	double Cin = 0.000222;
+	double aux4=derivada1_Vpvref*Cin;
+
+	////////2) Cálculo de eVpv-----(OBS Kv=0.05/Cin) mas como eVpv será mult. por Cin esse termo é cancelado
+
 	Serial.print("Vpv: ");
 	Serial.println(Vpv,4);
 	Serial.print("Ipv: ");
