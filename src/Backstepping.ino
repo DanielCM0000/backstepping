@@ -19,7 +19,7 @@ double 	Vpvref,
 		time_previous,
 		now,
 		delta_T, 
-		Vpvref_previous = 0,time_previous_Vpvref = 0,
+		Vpvref_previous = 0,time_previous_Vpvref = millis(),time_previous_integral = millis(),
 		Ipvo = 0,
 		Vpvo = 0;
 
@@ -29,7 +29,10 @@ double 	Vpvref_SLEWRATE_FINAL = 0 , Vpvref_SLEWRATE_FINAL_AUXILIAR = 0;
 const int Vpvref_SLEWRATE_MAX = 550;// MODIFICAR DE ACORDO COM OS TESTES 
 const int Vpvref_SLEWRATE_MIN = 510;// MODIFICAR DE ACORDO COM OS TESTES 
 
+const double Lin=0.0039;
 
+double integral_anterior = 0;
+double erro_Vpv_anterior = 0;
 
 double derivada1_SR_aux = 0;
 double d1_SR_out = 0;
@@ -55,14 +58,14 @@ void loop() {
 	delta_T = now - time_previous;
 	Vpvref_SLEWRATE = (Vpvref - Vpvref_previous)/delta_T;
 
-	const double SR_ST = 0.0002; //TESTAR PARA REFICAR VALOR
+
 
 	if(Vpvref_SLEWRATE>Vpvref_SLEWRATE_MAX){		
-		Vpvref_SLEWRATE_FINAL=(Vpvref_SLEWRATE_MAX*SR_ST)-(Vpvref_SLEWRATE_FINAL_AUXILIAR);		
+		Vpvref_SLEWRATE_FINAL=(Vpvref_SLEWRATE_MAX*delta_T)-(Vpvref_SLEWRATE_FINAL_AUXILIAR);		
 	}
 
 	if(Vpvref_SLEWRATE<Vpvref_SLEWRATE_MIN){		
-		Vpvref_SLEWRATE_FINAL=(Vpvref_SLEWRATE_MIN*SR_ST)-(Vpvref_SLEWRATE_FINAL_AUXILIAR);		
+		Vpvref_SLEWRATE_FINAL=(Vpvref_SLEWRATE_MIN*delta_T)-(Vpvref_SLEWRATE_FINAL_AUXILIAR);		
 	}
 
 	Vpvref_SLEWRATE_FINAL_AUXILIAR=Vpvref_SLEWRATE_FINAL;
@@ -78,9 +81,11 @@ void loop() {
 	double d1_SR_F=100;
 
 	//////1) Cálculo da 1º derivada de Vpvref
-	double delta_time_ST  = millis()-time_previous_Vpvref;
+	double time_now =  millis();
+	double delta_time_ST  = time_now-time_previous_Vpvref;
+	time_previous_Vpvref = time_now;
+	
 	double derivada1_Vpvref = (Vpvref-Vpvref_previous)/(delta_time_ST);	
-
 	double derivada1_SR=(derivada1_Vpvref-derivada1_SR_aux)/(delta_time_ST);
 
 
@@ -101,6 +106,51 @@ void loop() {
 	double aux4=derivada1_Vpvref*Cin;
 
 	////////2) Cálculo de eVpv-----(OBS Kv=0.05/Cin) mas como eVpv será mult. por Cin esse termo é cancelado
+
+	const double kv = 0.05;
+
+	double erro_Vpv = (Vpvref-Vpv);
+
+	/////////3) Cálculo de eI------(OBS KI = 0.01/Cin) idem a eVpv
+	const double ki = 0.01,Integral_max1=664,Integral_min1=-664;
+
+	double now_integral = millis();
+	double delta_integral = now_integral - time_previous_integral; 
+	time_previous_integral = now;
+	double integral=integral_anterior-ki*(((erro_Vpv+erro_Vpv_anterior)*delta_integral)/2);  //Área do trapézio
+	
+	if (integral>Integral_max1){ 
+		integral=Integral_max1;
+	}
+	if(integral<Integral_min1){
+		integral=Integral_min1;
+	}
+
+	erro_Vpv_anterior = erro_Vpv;
+	integral_anterior = integral;
+
+	double ILV = (-integral-(erro_Vpv*kv)-aux4)+Ipv;
+
+	if(ILV>1.1*677.226)	ILV=677.226;  
+	if(Vpvref_SLEWRATE_FINAL<0)	Vpvref=0; 
+
+	/////Cálculo de eIL ////
+	double erro_IL=(ILV-IL1)*(0.0001/Lin);
+
+	///////////////////////////////////////Segunda derivada e termos adjacentes//////////////////////////////////////////////////////////
+
+	///////////////////1) Cálculo de eVpv/Cin
+
+	double eVpv_1=erro_Vpv/(Cin);
+	/////////////////2) Cálculo de eVpv*KI
+
+	double eVpv_2=erro_Vpv*KI;
+
+	////////////////3) Cálculo da 2º derivada de Vpvref
+
+	d2_Vpvref = (d1_Vpvref-d1_Vpvref0)/(ST_d2);
+
+	d1_Vpvref0=d1_Vpvref;
 
 	Serial.print("Vpv: ");
 	Serial.println(Vpv,4);
