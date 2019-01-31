@@ -44,6 +44,11 @@ void setup(){
 	Serial.begin(9600);
 	time_previous = millis();
 	time_previous_Vpvref = millis();
+
+	pinMode(18, OUTPUT);//Definimos o pino 2 (LED) como saída.
+ 
+	ledcAttachPin(18, 0);//Atribuimos o pino 2 ao canal 0.
+	ledcSetup(0, 150, 10);//Atribuimos ao canal 0 a frequencia de 1000Hz com resolucao de 10bits
 }
 
 void loop() {
@@ -173,6 +178,42 @@ void loop() {
 	}
 
 	derivada2_SlewRate_anterior = derivada2_SlewRate;
+
+	////////////////4) Cálculo eIL/Cin e epv*kv
+
+	double erro_IL_1 = (ILV-IL1)/Cin;
+
+	double erro_Vpv_3 = erro_Vpv*kv;
+
+	double aux6 = kv*(-erro_Vpv_3 -erro_IL_1  -integral);
+
+	double aux7 = (derivada2_Vpvref-eVpv_2-aux6)*Cin;
+	///////////////////////////////////////Cálculo considerando Lin (Final do equacionamento)//////////////////////////////////////////////////////////
+
+	////////1) derivada Ipv
+
+	double deriv_Ipv=Ipv;
+	double deriv_Ipv0=Ipvo;
+
+	double derivada1_Ipv=(deriv_Ipv-deriv_Ipv0)/(delta_derivada2);
+
+	deriv_Ipv0=deriv_Ipv;
+
+	//////1.1)  Saturação de d1_Ipv 
+
+	double aux5=(-derivada1_Ipv-erro_IL+eVpv_1+aux7)*Lin;
+
+	if(aux5>3000)aux5=3000;  
+	if(aux5<0) aux5=0; 
+
+	//////////////////////////////////////(aux5+Vpv)/Vout//////////////////////////////////////////////////////////
+	double dc =90-((aux5+Vpv)/(Vout+1));
+
+	if(dc>200)dc=200;
+	if(dc<0)dc=0;
+
+	ledcWrite(0, map(dc, 0, 200, 0, 1023));
+
 
 	Serial.print("Vpv: ");
 	Serial.println(Vpv,4);
