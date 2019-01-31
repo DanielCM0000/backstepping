@@ -19,7 +19,7 @@ double 	Vpvref,
 		time_previous,
 		now,
 		delta_T, 
-		Vpvref_previous = 0,time_previous_Vpvref = millis(),time_previous_integral = millis(),
+		Vpvref_previous = 0,time_previous_Vpvref = millis(),time_previous_integral = millis(),time_previous_derivado2 = millis(),
 		Ipvo = 0,
 		Vpvo = 0;
 
@@ -36,6 +36,9 @@ double erro_Vpv_anterior = 0;
 
 double derivada1_SR_aux = 0;
 double d1_SR_out = 0;
+
+double derivada1_Vpvref_anterior = 0;
+double derivada2_SlewRate_anterior = 0;
 
 void setup(){
 	Serial.begin(9600);
@@ -144,13 +147,32 @@ void loop() {
 	double eVpv_1=erro_Vpv/(Cin);
 	/////////////////2) Cálculo de eVpv*KI
 
-	double eVpv_2=erro_Vpv*KI;
+	double eVpv_2=erro_Vpv*ki;
 
 	////////////////3) Cálculo da 2º derivada de Vpvref
+	double now_derivada2 = millis();
+	double delta_derivada2 = now_derivada2 - time_previous_derivado2;
+	double derivada2_Vpvref = (derivada1_Vpvref-derivada1_Vpvref_anterior)/(delta_derivada2);
+	derivada1_Vpvref_anterior = derivada2_Vpvref;
 
-	d2_Vpvref = (d1_Vpvref-d1_Vpvref0)/(ST_d2);
+	/////3.1) Slew Rate e Saturação de d2_ Vpvref
 
-	d1_Vpvref0=d1_Vpvref;
+	double const d2_SR_R=200;
+	double const d2_SR_F=100;
+
+
+	double derivada2_SlewRate=(derivada2_Vpvref-derivada2_SlewRate_anterior)/(delta_derivada2);
+
+	double derivada2_SlewRate_final;
+	if(derivada2_SlewRate>d2_SR_R)	{	
+		derivada2_SlewRate_final=((d2_SR_R)*(delta_derivada2))+(derivada2_SlewRate_anterior);		
+	}
+
+	if(derivada2_SlewRate<d2_SR_F)	{
+		derivada2_SlewRate_final=(d2_SR_F*delta_derivada2)-(derivada2_SlewRate_anterior);		
+	}
+
+	derivada2_SlewRate_anterior = derivada2_SlewRate;
 
 	Serial.print("Vpv: ");
 	Serial.println(Vpv,4);
